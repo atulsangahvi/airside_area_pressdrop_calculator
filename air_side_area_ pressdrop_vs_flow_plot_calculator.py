@@ -65,13 +65,13 @@ def calculate_air_side_results(
     m_dot = rho * air_flow_m3s
     G = m_dot / net_free_flow_area if net_free_flow_area > 0 else 0
 
-    # Corrected wetted perimeter per fin passage
-    fins_per_height = face_height_m * fins_per_m
-    tube_perimeter = math.pi * tube_od_m * tubes_per_row * fins_per_height
-    fin_surface = 2 * face_width_m * fins_per_height
-    wetted_perimeter = tube_perimeter + fin_surface
+    # Hydraulic diameter using per-passage geometry (Kuppan/Shah)
+    passage_height = tube_pitch_m - tube_od_m
+    passage_width = fin_spacing_m - fin_thickness_m
+    A_min_cell = passage_height * passage_width
+    P_wet_cell = 2 * (passage_height + passage_width)
+    D_h = (4 * A_min_cell) / P_wet_cell if P_wet_cell > 0 else 0
 
-    D_h = (4 * net_free_flow_area) / wetted_perimeter if wetted_perimeter > 0 else 0
     Re = G * D_h / mu if mu > 0 else 0
     f = 0.35 * Re ** -0.2 if Re > 0 else 0
     flow_depth = num_rows * row_pitch_m
@@ -88,7 +88,6 @@ def calculate_air_side_results(
         "Free flow area (%)": percent_free_area,
         "Air velocity (m/s)": air_velocity_ms,
         "Hydraulic diameter (m)": D_h,
-        "Wetted perimeter (m)": wetted_perimeter,
         "Air density (kg/m³)": rho,
         "Air viscosity (Pa·s)": mu,
         "Mass flow rate (kg/s)": m_dot,
@@ -98,7 +97,7 @@ def calculate_air_side_results(
         "Air-side Pressure Drop (Pa)": dP
     }
 
-st.title("Air-Side Area and Pressure Drop Calculator")
+st.title("Air-Side Area and Pressure Drop Calculator (Unit Passage D_h)")
 
 tube_od_mm = st.number_input("Tube Outer Diameter (mm)", value=9.525)
 tube_pitch_mm = st.number_input("Tube Pitch (mm)", value=25.4)
