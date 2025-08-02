@@ -64,8 +64,14 @@ def calculate_air_side_results(
 
     m_dot = rho * air_flow_m3s
     G = m_dot / net_free_flow_area if net_free_flow_area > 0 else 0
-    perimeter_per_gap = 2 * face_width_m + tubes_per_row * (math.pi * tube_od_m)
-    D_h = (4 * net_free_flow_area) / perimeter_per_gap if perimeter_per_gap > 0 else 0
+
+    # Corrected wetted perimeter per fin passage
+    fins_per_height = face_height_m * fins_per_m
+    tube_perimeter = math.pi * tube_od_m * tubes_per_row * fins_per_height
+    fin_surface = 2 * face_width_m * fins_per_height
+    wetted_perimeter = tube_perimeter + fin_surface
+
+    D_h = (4 * net_free_flow_area) / wetted_perimeter if wetted_perimeter > 0 else 0
     Re = G * D_h / mu if mu > 0 else 0
     f = 0.35 * Re ** -0.2 if Re > 0 else 0
     flow_depth = num_rows * row_pitch_m
@@ -82,6 +88,7 @@ def calculate_air_side_results(
         "Free flow area (%)": percent_free_area,
         "Air velocity (m/s)": air_velocity_ms,
         "Hydraulic diameter (m)": D_h,
+        "Wetted perimeter (m)": wetted_perimeter,
         "Air density (kg/m³)": rho,
         "Air viscosity (Pa·s)": mu,
         "Mass flow rate (kg/s)": m_dot,
