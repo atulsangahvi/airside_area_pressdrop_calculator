@@ -52,7 +52,7 @@ def calculate_air_side_results(
     percent_free_area = 100 * net_free_flow_area / frontal_area_m2
     air_flow_m3s = air_flow_cmh / 3600
     face_velocity = air_flow_m3s / frontal_area_m2
-    u_max = air_flow_m3s / net_free_flow_area if net_free_flow_area > 0 else 0
+    u_max = face_velocity * tube_pitch_m / (tube_pitch_m - tube_od_m) if (tube_pitch_m - tube_od_m) > 0 else 0
 
     if coolprop_available:
         T_K = air_temp_C + 273.15
@@ -64,6 +64,7 @@ def calculate_air_side_results(
         rho, mu = air_properties_lookup(air_temp_C)
 
     m_dot = rho * air_flow_m3s
+    Re = (rho * u_max * tube_od_m) / mu if mu > 0 else 0
 
     passage_height = tube_pitch_m - tube_od_m
     passage_width = fin_spacing_m - fin_thickness_m
@@ -71,10 +72,10 @@ def calculate_air_side_results(
     P_wet_cell = 2 * (passage_height + passage_width)
     D_h = (4 * A_min_cell) / P_wet_cell if P_wet_cell > 0 else 0
 
-    Re = (rho * u_max * D_h) / mu if mu > 0 else 0
+    G = m_dot / net_free_flow_area if net_free_flow_area > 0 else 0
     f = 0.25 * Re**-0.25 if Re > 0 else 0
     flow_depth = num_rows * row_pitch_m
-    dP = f * (flow_depth / D_h) * (m_dot / net_free_flow_area)**2 / (2 * rho) if D_h > 0 else 0
+    dP = f * (flow_depth / D_h) * (G**2) / (2 * rho) if D_h > 0 else 0
 
     return {
         "Tubes per row": tubes_per_row,
@@ -86,17 +87,20 @@ def calculate_air_side_results(
         "Free flow area (m²)": net_free_flow_area,
         "Free flow area (%)": percent_free_area,
         "Face velocity (m/s)": face_velocity,
-        "Max fin passage velocity (m/s)": u_max,
-        "Hydraulic diameter (m)": D_h,
+        "Max velocity between tubes (m/s)": u_max,
+        "Tube Pitch (m)": tube_pitch_m,
+        "Tube OD (m)": tube_od_m,
         "Air density (kg/m³)": rho,
         "Air viscosity (Pa·s)": mu,
+        "Hydraulic diameter (m)": D_h,
         "Mass flow rate (kg/s)": m_dot,
-        "Reynolds number (corrected)": Re,
+        "Mass flux (kg/m²·s)": G,
+        "Reynolds number (OD-based)": Re,
         "Friction factor": f,
         "Air-side Pressure Drop (Pa)": dP
     }
 
-st.title("Air-Side Area and Pressure Drop Calculator (Corrected Reynolds Number)")
+st.title("Air-Side Area and Pressure Drop Calculator (OD-based Re)")
 
 tube_od_mm = st.number_input("Tube Outer Diameter (mm)", value=9.525)
 tube_pitch_mm = st.number_input("Tube Pitch (mm)", value=25.4)
