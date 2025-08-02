@@ -2,7 +2,6 @@
 import math
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 try:
     from CoolProp.CoolProp import PropsSI
     coolprop_available = True
@@ -22,7 +21,7 @@ def air_properties_lookup(T_C):
             return rho, mu
     return rho_table[-1], mu_table[-1]
 
-def calculate_pressure_drop(
+def calculate_air_side_results(
     tube_od_mm, tube_pitch_mm, row_pitch_mm,
     fin_thickness_mm, fpi, num_rows, face_width_m, face_height_m,
     air_flow_cmh, air_temp_C
@@ -34,13 +33,23 @@ def calculate_pressure_drop(
     fins_per_m = fpi * 39.3701
     fin_spacing_m = 1 / fins_per_m
     frontal_area_m2 = face_width_m * face_height_m
+    fin_depth_m = num_rows * row_pitch_m
     tubes_per_row = math.floor(face_width_m / tube_pitch_m)
+    total_tubes = tubes_per_row * num_rows
+    tube_ext_area = total_tubes * (math.pi * tube_od_m)
+
+    fin_area_per_fin = 2 * face_width_m * fin_depth_m
+    total_gross_fin_area = fin_area_per_fin * fins_per_m
+    hole_area_per_tube = (math.pi / 4) * tube_od_m**2
+    total_hole_area = hole_area_per_tube * total_tubes * fins_per_m
+    net_fin_area = total_gross_fin_area - total_hole_area
+    total_air_side_area = (tube_ext_area + net_fin_area) * face_height_m
 
     open_area_per_gap = face_width_m * (fin_spacing_m - fin_thickness_m)
     total_open_area = open_area_per_gap * fins_per_m * face_height_m
     frontal_tube_blockage = tubes_per_row * (math.pi / 4) * tube_od_m**2 * face_height_m
     net_free_flow_area = total_open_area - frontal_tube_blockage
-
+    percent_free_area = 100 * net_free_flow_area / frontal_area_m2
     air_flow_m3s = air_flow_cmh / 3600
     air_velocity_ms = air_flow_m3s / net_free_flow_area if net_free_flow_area > 0 else 0
 
@@ -62,9 +71,27 @@ def calculate_pressure_drop(
     flow_depth = num_rows * row_pitch_m
     dP = f * (flow_depth / D_h) * (G**2) / (2 * rho) if D_h > 0 else 0
 
-    return air_velocity_ms, Re, f, D_h, dP
+    return {
+        "Tubes per row": tubes_per_row,
+        "Total tubes": total_tubes,
+        "Fin depth (m)": fin_depth_m,
+        "Tube external area (m²)": tube_ext_area,
+        "Net fin area (m²)": net_fin_area,
+        "Total air side area (m²)": total_air_side_area,
+        "Free flow area (m²)": net_free_flow_area,
+        "Free flow area (%)": percent_free_area,
+        "Air velocity (m/s)": air_velocity_ms,
+        "Hydraulic diameter (m)": D_h,
+        "Air density (kg/m³)": rho,
+        "Air viscosity (Pa·s)": mu,
+        "Mass flow rate (kg/s)": m_dot,
+        "Mass flux (kg/m²·s)": G,
+        "Reynolds number": Re,
+        "Friction factor": f,
+        "Air-side Pressure Drop (Pa)": dP
+    }
 
-st.title("Air-Side Pressure Drop vs Air Flow")
+st.title("Air-Side Area and Pressure Drop Calculator")
 
 tube_od_mm = st.number_input("Tube Outer Diameter (mm)", value=9.525)
 tube_pitch_mm = st.number_input("Tube Pitch (mm)", value=25.4)
@@ -74,28 +101,16 @@ fpi = st.number_input("Fins Per Inch (FPI)", value=12)
 num_rows = st.number_input("Number of Rows", value=4)
 face_width_m = st.number_input("Coil Face Width (m)", value=1.0)
 face_height_m = st.number_input("Coil Face Height (m)", value=1.0)
+air_flow_cmh = st.number_input("Air Flow Rate (m³/h)", value=10000)
 air_temp_C = st.number_input("Air Temperature (°C)", value=35.0)
 
-air_flow_range = st.slider("Air Flow Rate (m³/h)", 5000, 25000, (5000, 20000), step=1000)
-
-flow_rates = []
-pressure_drops = []
-
-for flow in range(air_flow_range[0], air_flow_range[1] + 1, 1000):
-    _, _, _, _, dp = calculate_pressure_drop(
+if st.button("Calculate"):
+    results = calculate_air_side_results(
         tube_od_mm, tube_pitch_mm, row_pitch_mm,
         fin_thickness_mm, fpi, num_rows,
         face_width_m, face_height_m,
-        flow, air_temp_C
+        air_flow_cmh, air_temp_C
     )
-    flow_rates.append(flow)
-    pressure_drops.append(dp)
-
-fig, ax = plt.subplots()
-ax.plot(flow_rates, pressure_drops, marker='o')
-ax.set_xlabel("Air Flow Rate (m³/h)")
-ax.set_ylabel("Pressure Drop (Pa)")
-ax.set_title("Pressure Drop vs Air Flow")
-ax.grid(True)
-
-st.pyplot(fig)
+    df = pd.DataFrame(list(results.items()), columns=["Parameter", "Value"])
+    df["Value"] = df["Value"].apply(lambda x: f"{x:.6f}" if isinstance(x, float) else x)
+    st.table(df)
