@@ -21,6 +21,14 @@ def air_properties_lookup(T_C):
             return rho, mu
     return rho_table[-1], mu_table[-1]
 
+def wang_chi_friction_factor(Re, Xt, Xl, pf, dc, Nr):
+    ln_Re = math.log(Re)
+    c7 = -0.764 + 0.739 * (Xt / Xl) + 0.177 * (pf / dc) - 0.00758 * Nr
+    c8 = -15.689 + 64.021 * ln_Re
+    c9 = 1.696 - 15.695 * ln_Re
+    f = 0.0267 * Re**c7 * (Xt / Xl)**c8 * (pf / dc)**c9
+    return f
+
 def calculate_air_side_results(
     tube_od_mm, tube_pitch_mm, row_pitch_mm,
     fin_thickness_mm, fpi, num_rows, face_width_m, face_height_m,
@@ -65,7 +73,6 @@ def calculate_air_side_results(
     m_dot = rho * air_flow_m3s
     G = m_dot / net_free_flow_area if net_free_flow_area > 0 else 0
 
-    # Hydraulic diameter using per-passage geometry (Kuppan/Shah)
     passage_height = tube_pitch_m - tube_od_m
     passage_width = fin_spacing_m - fin_thickness_m
     A_min_cell = passage_height * passage_width
@@ -73,7 +80,15 @@ def calculate_air_side_results(
     D_h = (4 * A_min_cell) / P_wet_cell if P_wet_cell > 0 else 0
 
     Re = G * D_h / mu if mu > 0 else 0
-    f = 0.35 * Re ** -0.2 if Re > 0 else 0
+
+    # Convert to mm for Wang & Chi
+    Xt = tube_pitch_mm
+    Xl = row_pitch_mm
+    pf = fin_spacing_m * 1000
+    dc = tube_od_mm
+    Nr = num_rows
+
+    f = wang_chi_friction_factor(Re, Xt, Xl, pf, dc, Nr)
     flow_depth = num_rows * row_pitch_m
     dP = f * (flow_depth / D_h) * (G**2) / (2 * rho) if D_h > 0 else 0
 
@@ -93,11 +108,11 @@ def calculate_air_side_results(
         "Mass flow rate (kg/s)": m_dot,
         "Mass flux (kg/m²·s)": G,
         "Reynolds number": Re,
-        "Friction factor": f,
+        "Friction factor (Wang & Chi)": f,
         "Air-side Pressure Drop (Pa)": dP
     }
 
-st.title("Air-Side Area and Pressure Drop Calculator (Unit Passage D_h)")
+st.title("Air-Side Area and Pressure Drop Calculator (Wang & Chi)")
 
 tube_od_mm = st.number_input("Tube Outer Diameter (mm)", value=9.525)
 tube_pitch_mm = st.number_input("Tube Pitch (mm)", value=25.4)
